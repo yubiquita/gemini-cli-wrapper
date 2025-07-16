@@ -14,7 +14,7 @@ A Go library that provides a convenient wrapper around the Gemini CLI command, e
 ## Installation
 
 ```bash
-go get github.com/user/gemini-cli-wrapper
+go get github.com/yubiquita/gemini-cli-wrapper
 ```
 
 ## Prerequisites
@@ -34,7 +34,7 @@ import (
     "fmt"
     "log"
     
-    "github.com/user/gemini-cli-wrapper"
+    "github.com/yubiquita/gemini-cli-wrapper"
 )
 
 func main() {
@@ -57,7 +57,7 @@ import (
     "log"
     "time"
     
-    "github.com/user/gemini-cli-wrapper"
+    "github.com/yubiquita/gemini-cli-wrapper"
 )
 
 func main() {
@@ -87,7 +87,7 @@ import (
     "fmt"
     "log"
     
-    "github.com/user/gemini-cli-wrapper"
+    "github.com/yubiquita/gemini-cli-wrapper"
 )
 
 // Implement the Logger interface
@@ -248,7 +248,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 This library acts as a wrapper around the Gemini CLI command, providing:
 
-```
+```text
 Google Gemini API ← Gemini CLI ← This Library ← Your Application
 ```
 
