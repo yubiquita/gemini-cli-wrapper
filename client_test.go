@@ -1,6 +1,8 @@
 package geminicli
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -721,5 +723,142 @@ func TestConvenienceExecuteWithFullConfig(t *testing.T) {
 	// The error should indicate command execution failed, not directory issues
 	if !strings.Contains(err.Error(), "failed to execute Gemini command") {
 		t.Errorf("Expected command execution error, got: %v", err)
+	}
+}
+
+// TestResolveRelativePaths tests the relative path resolution functionality
+func TestResolveRelativePaths(t *testing.T) {
+	// Create a temporary client for testing
+	client := NewClient()
+
+	// Test cases
+	tests := []struct {
+		name     string
+		prompt   string
+		baseDir  string
+		expected string
+	}{
+		{
+			name:     "RelativePathWithDot",
+			prompt:   "Analyze ./main.go",
+			baseDir:  "/project/src",
+			expected: "Analyze /project/src/main.go",
+		},
+		{
+			name:     "RelativePathWithDoubleDot",
+			prompt:   "Check ../config.json",
+			baseDir:  "/project/src",
+			expected: "Check /project/config.json",
+		},
+		{
+			name:     "SimpleRelativePath",
+			prompt:   "Review file.txt",
+			baseDir:  "/project",
+			expected: "Review /project/file.txt",
+		},
+		{
+			name:     "AbsolutePathPreserved",
+			prompt:   "Analyze /absolute/path/file.go",
+			baseDir:  "/project",
+			expected: "Analyze /absolute/path/file.go",
+		},
+		{
+			name:     "SubdirectoryPath",
+			prompt:   "Check subdir/file.py",
+			baseDir:  "/project",
+			expected: "Check /project/subdir/file.py",
+		},
+		{
+			name:     "MultiplePathsInPrompt",
+			prompt:   "Compare ./file1.txt and ./file2.txt",
+			baseDir:  "/project",
+			expected: "Compare /project/file1.txt and /project/file2.txt",
+		},
+		{
+			name:     "NoPathsInPrompt",
+			prompt:   "What is the weather today?",
+			baseDir:  "/project",
+			expected: "What is the weather today?",
+		},
+		{
+			name:     "MixedPathTypes",
+			prompt:   "Compare ./local.txt with /absolute/remote.txt",
+			baseDir:  "/project",
+			expected: "Compare /project/local.txt with /absolute/remote.txt",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := client.resolveRelativePaths(tt.prompt, tt.baseDir)
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+
+			if result != tt.expected {
+				t.Errorf("Expected '%s', got '%s'", tt.expected, result)
+			}
+		})
+	}
+}
+
+// TestResolveRelativePathsError tests error handling in path resolution
+func TestResolveRelativePathsError(t *testing.T) {
+	client := NewClient()
+
+	// Test with empty base directory
+	result, err := client.resolveRelativePaths("./test.txt", "")
+	if err != nil {
+		t.Errorf("Should not error with empty base directory: %v", err)
+	}
+
+	// Should still process the path
+	if !strings.Contains(result, "test.txt") {
+		t.Errorf("Expected result to contain 'test.txt', got: %s", result)
+	}
+}
+
+// TestWorkingDirectoryPathResolution tests the integration of working directory with path resolution
+func TestWorkingDirectoryPathResolution(t *testing.T) {
+	// Create a temporary directory for testing
+	tempDir, err := os.MkdirTemp("", "gemini_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Create a test file
+	testFile := filepath.Join(tempDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	// Change to temp directory
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current directory: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("Failed to change directory: %v", err)
+	}
+
+	// Test with working directory set
+	config := Config{
+		WorkingDirectory: "/tmp/gemini_config",
+	}
+	client := NewClientWithConfig(config)
+
+	// Test path resolution
+	result, err := client.resolveRelativePaths("./test.txt", tempDir)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	expectedPath := filepath.Join(tempDir, "test.txt")
+	if !strings.Contains(result, expectedPath) {
+		t.Errorf("Expected result to contain '%s', got: %s", expectedPath, result)
 	}
 }

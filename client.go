@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -90,8 +92,23 @@ func (c *Client) Execute(prompt string) (string, error) {
 		return "", fmt.Errorf(ErrEmptyPrompt)
 	}
 
+	// Resolve relative paths if working directory is set
+	resolvedPrompt := prompt
+	if c.workingDirectory != "" {
+		currentDir, err := os.Getwd()
+		if err != nil {
+			c.logger.WarnWith("Failed to get current directory for path resolution", "error", err)
+		} else {
+			resolvedPrompt, err = c.resolveRelativePaths(prompt, currentDir)
+			if err != nil {
+				c.logger.WarnWith("Failed to resolve relative paths", "error", err)
+				resolvedPrompt = prompt // Use original prompt if resolution fails
+			}
+		}
+	}
+
 	// Build command
-	cmdArgs := c.buildGeminiCommandWithModel(prompt)
+	cmdArgs := c.buildGeminiCommandWithModel(resolvedPrompt)
 
 	// Log command execution for debugging
 	c.logger.DebugWith("Executing Gemini command", "command", cmdArgs[0], "args", cmdArgs[1:])
@@ -106,20 +123,24 @@ func (c *Client) Execute(prompt string) (string, error) {
 	c.logger.DebugWith("Using gemini path", "path", geminiPath)
 	cmd := exec.Command(geminiPath, cmdArgs[1:]...)
 
-	// Set working directory based on configuration or fallback to home directory
+	// Set working directory based on configuration or fallback to current directory
 	if c.workingDirectory != "" {
 		cmd.Dir = c.workingDirectory
 		c.logger.DebugWith("Using configured working directory", "dir", cmd.Dir)
 	} else {
-		// Fallback to home directory to avoid module resolution issues
-		cmd.Dir = os.Getenv("HOME")
-		if cmd.Dir == "" {
-			// Fallback to current user's home directory
-			if user, err := user.Current(); err == nil {
-				cmd.Dir = user.HomeDir
+		// Use current working directory as default
+		cmd.Dir, err = os.Getwd()
+		if err != nil || cmd.Dir == "" {
+			// Fallback to home directory if current directory cannot be determined
+			cmd.Dir = os.Getenv("HOME")
+			if cmd.Dir == "" {
+				// Final fallback to current user's home directory
+				if user, err := user.Current(); err == nil {
+					cmd.Dir = user.HomeDir
+				}
 			}
 		}
-		c.logger.DebugWith("Using default home directory", "dir", cmd.Dir)
+		c.logger.DebugWith("Using current/default directory", "dir", cmd.Dir)
 	}
 
 	// Execute with timeout
@@ -146,8 +167,23 @@ func (c *Client) ExecuteWithTimeout(prompt string, timeout time.Duration) (strin
 		return "", fmt.Errorf(ErrEmptyPrompt)
 	}
 
+	// Resolve relative paths if working directory is set
+	resolvedPrompt := prompt
+	if c.workingDirectory != "" {
+		currentDir, err := os.Getwd()
+		if err != nil {
+			c.logger.WarnWith("Failed to get current directory for path resolution", "error", err)
+		} else {
+			resolvedPrompt, err = c.resolveRelativePaths(prompt, currentDir)
+			if err != nil {
+				c.logger.WarnWith("Failed to resolve relative paths", "error", err)
+				resolvedPrompt = prompt // Use original prompt if resolution fails
+			}
+		}
+	}
+
 	// Build command
-	cmdArgs := c.buildGeminiCommandWithModel(prompt)
+	cmdArgs := c.buildGeminiCommandWithModel(resolvedPrompt)
 
 	// Log command execution for debugging
 	c.logger.DebugWith("Executing Gemini command with timeout", "command", cmdArgs[0], "args", cmdArgs[1:], "timeout", timeout)
@@ -162,20 +198,24 @@ func (c *Client) ExecuteWithTimeout(prompt string, timeout time.Duration) (strin
 	c.logger.DebugWith("Using gemini path", "path", geminiPath)
 	cmd := exec.Command(geminiPath, cmdArgs[1:]...)
 
-	// Set working directory based on configuration or fallback to home directory
+	// Set working directory based on configuration or fallback to current directory
 	if c.workingDirectory != "" {
 		cmd.Dir = c.workingDirectory
 		c.logger.DebugWith("Using configured working directory", "dir", cmd.Dir)
 	} else {
-		// Fallback to home directory to avoid module resolution issues
-		cmd.Dir = os.Getenv("HOME")
-		if cmd.Dir == "" {
-			// Fallback to current user's home directory
-			if user, err := user.Current(); err == nil {
-				cmd.Dir = user.HomeDir
+		// Use current working directory as default
+		cmd.Dir, err = os.Getwd()
+		if err != nil || cmd.Dir == "" {
+			// Fallback to home directory if current directory cannot be determined
+			cmd.Dir = os.Getenv("HOME")
+			if cmd.Dir == "" {
+				// Final fallback to current user's home directory
+				if user, err := user.Current(); err == nil {
+					cmd.Dir = user.HomeDir
+				}
 			}
 		}
-		c.logger.DebugWith("Using default home directory", "dir", cmd.Dir)
+		c.logger.DebugWith("Using current/default directory", "dir", cmd.Dir)
 	}
 
 	// Execute with custom timeout
@@ -353,6 +393,38 @@ func (c *Client) filterGeminiOutput(output string) string {
 	// Join filtered lines and normalize whitespace
 	result := strings.Join(filteredLines, "\n")
 	return strings.TrimSpace(result)
+}
+
+// resolveRelativePaths resolves relative paths in the prompt to absolute paths
+func (c *Client) resolveRelativePaths(prompt string, baseDir string) (string, error) {
+	// Regular expression to match file paths
+	// This pattern matches:
+	// - ./file.txt, ../file.txt (explicit relative paths)
+	// - file.txt, subdir/file.txt (files with common extensions)
+	// - /absolute/path/file.txt (absolute paths, preserved)
+	pathPattern := regexp.MustCompile(`(?:\./|\.\./)[\w\-\.\/]+|[\w\-\.\/]*\.(?:txt|md|go|js|py|json|yaml|yml|xml|html|css|sh|conf|cfg|ini|log|out|err|csv|tsv|sql|db|lock|mod|sum|env|toml|proto|pb|rs|c|cpp|h|hpp|java|kt|php|rb|swift|dart|scala|clj|hs|elm|ml|fs|pl|r|m|mm|vue|jsx|tsx|svelte|astro|wasm|zip|tar|gz|bz2|xz|7z|rar|pdf|doc|docx|xls|xlsx|ppt|pptx|png|jpg|jpeg|gif|bmp|svg|webp|ico|mp3|mp4|avi|mov|wmv|flv|mkv|webm|wav|ogg|flac|aac|m4a|ttf|otf|woff|woff2|eot)\b`)
+
+	// Replace matches with resolved paths
+	result := pathPattern.ReplaceAllStringFunc(prompt, func(match string) string {
+		match = strings.TrimSpace(match)
+		if match == "" {
+			return match
+		}
+
+		// Skip if already absolute path
+		if filepath.IsAbs(match) {
+			return match
+		}
+
+		// Resolve relative path
+		resolvedPath := filepath.Join(baseDir, match)
+		cleanPath := filepath.Clean(resolvedPath)
+
+		c.logger.DebugWith("Resolved relative path", "original", match, "resolved", cleanPath)
+		return cleanPath
+	})
+
+	return result, nil
 }
 
 // Convenience functions for backward compatibility

@@ -169,6 +169,31 @@ func main() {
 }
 ```
 
+#### Relative Path Resolution
+
+When using a `WorkingDirectory`, relative paths in prompts are automatically resolved to absolute paths based on your current working directory:
+
+```go
+// Current directory: /home/user/myproject
+// Working directory: /config/gemini
+
+config := geminicli.Config{
+    WorkingDirectory: "/config/gemini",
+}
+client := geminicli.NewClientWithConfig(config)
+
+// Relative paths are resolved automatically
+response, err := client.Execute("Analyze ./main.go and ./config.json")
+// Becomes: "Analyze /home/user/myproject/main.go and /home/user/myproject/config.json"
+```
+
+**Key behaviors:**
+- `./file.txt` → `/current/directory/file.txt`
+- `../parent/file.txt` → `/current/parent/file.txt`
+- `subdir/file.txt` → `/current/directory/subdir/file.txt`
+- `/absolute/path/file.txt` → `/absolute/path/file.txt` (unchanged)
+- When `WorkingDirectory` is not set, Gemini runs in your current directory (no path resolution needed)
+
 ### Custom Logger Integration
 
 ```go
@@ -582,6 +607,30 @@ If your context files aren't being loaded:
    ```bash
    chmod 644 /path/to/directory/*.md
    ```
+
+#### Relative Path Issues
+If relative paths in prompts aren't working as expected:
+
+1. **Check current directory**: The library resolves relative paths based on where you run your program
+   ```bash
+   pwd  # Shows your current directory
+   ```
+
+2. **Use absolute paths**: When in doubt, use absolute paths in prompts
+   ```go
+   // Instead of: "Analyze ./main.go"
+   // Use: "Analyze /full/path/to/main.go"
+   ```
+
+3. **Debug path resolution**: Enable debug logging to see how paths are resolved
+   ```go
+   config := geminicli.Config{
+       WorkingDirectory: "/config/gemini",
+       Logger:          &DebugLogger{},
+   }
+   ```
+
+4. **Natural language file references**: Remember that phrases like "check the main file" won't be resolved - use explicit paths
 
 ### Debug Mode
 
