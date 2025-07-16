@@ -10,15 +10,17 @@ import (
 	"time"
 )
 
-// 定数定義
+// Constants
 const (
-	// Geminiコマンド関連
+	// Gemini command related
 	GeminiCommand    = "gemini"
 	GeminiPromptFlag = "-p"
+	GeminiModelFlag  = "-m"
 	DefaultTimeout   = 30 * time.Second
+	DefaultModel     = "gemini-2.5-flash"
 	MaxRetries       = 3
 
-	// エラーメッセージ
+	// Error messages
 	ErrEmptyPrompt     = "prompt cannot be empty"
 	ErrCommandNotFound = "Gemini command not found in PATH"
 	ErrCommandFailed   = "failed to execute Gemini command"
@@ -33,12 +35,14 @@ const (
 type Client struct {
 	logger  Logger
 	timeout time.Duration
+	model   string // Model name to use
 }
 
 // Config represents configuration options for the client
 type Config struct {
 	Logger  Logger
 	Timeout time.Duration
+	Model   string // Model name (e.g., "gemini-2.5-flash", "gemini-2.5-pro")
 }
 
 // NewClient creates a new Gemini CLI client with default configuration
@@ -46,6 +50,7 @@ func NewClient() *Client {
 	return &Client{
 		logger:  NewNoOpLogger(),
 		timeout: DefaultTimeout,
+		model:   DefaultModel,
 	}
 }
 
@@ -53,6 +58,7 @@ func NewClient() *Client {
 func NewClientWithConfig(config Config) *Client {
 	client := &Client{
 		timeout: DefaultTimeout,
+		model:   DefaultModel,
 	}
 
 	if config.Logger != nil {
@@ -65,6 +71,10 @@ func NewClientWithConfig(config Config) *Client {
 		client.timeout = config.Timeout
 	}
 
+	if config.Model != "" {
+		client.model = config.Model
+	}
+
 	return client
 }
 
@@ -75,7 +85,7 @@ func (c *Client) Execute(prompt string) (string, error) {
 	}
 
 	// Build command
-	cmdArgs := c.buildGeminiCommand(prompt)
+	cmdArgs := c.buildGeminiCommandWithModel(prompt)
 	
 	// Log command execution for debugging
 	c.logger.DebugWith("Executing Gemini command", "command", cmdArgs[0], "args", cmdArgs[1:])
@@ -125,7 +135,7 @@ func (c *Client) ExecuteWithTimeout(prompt string, timeout time.Duration) (strin
 	}
 
 	// Build command
-	cmdArgs := c.buildGeminiCommand(prompt)
+	cmdArgs := c.buildGeminiCommandWithModel(prompt)
 
 	// Create command
 	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
@@ -157,6 +167,11 @@ func (c *Client) ValidateAvailable() error {
 // buildGeminiCommand builds the command arguments for Gemini
 func (c *Client) buildGeminiCommand(prompt string) []string {
 	return []string{GeminiCommand, GeminiPromptFlag, prompt}
+}
+
+// buildGeminiCommandWithModel builds the command arguments for Gemini with model specification
+func (c *Client) buildGeminiCommandWithModel(prompt string) []string {
+	return []string{GeminiCommand, GeminiModelFlag, c.model, GeminiPromptFlag, prompt}
 }
 
 // runCommandWithTimeout executes a command with the specified timeout
@@ -335,4 +350,18 @@ func DetectAuthError(output []byte) bool {
 func ParseGeminiOutput(output []byte) (string, error) {
 	client := NewClient()
 	return client.parseGeminiOutput(output)
+}
+
+// ExecuteWithModel executes a Gemini command with the specified model
+func ExecuteWithModel(prompt, model string) (string, error) {
+	config := Config{Model: model}
+	client := NewClientWithConfig(config)
+	return client.Execute(prompt)
+}
+
+// ExecuteWithModelAndTimeout executes a Gemini command with the specified model and timeout
+func ExecuteWithModelAndTimeout(prompt, model string, timeout time.Duration) (string, error) {
+	config := Config{Model: model, Timeout: timeout}
+	client := NewClientWithConfig(config)
+	return client.Execute(prompt)
 }

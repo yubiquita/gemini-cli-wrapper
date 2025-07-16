@@ -5,6 +5,7 @@ A Go library that provides a convenient wrapper around the Gemini CLI command, e
 ## Features
 
 - **Simple API**: Easy-to-use client interface for Gemini CLI interactions
+- **Model Selection**: Support for different Gemini models (flash, pro, etc.)
 - **Timeout Support**: Configurable command timeouts to prevent hanging
 - **Error Handling**: Comprehensive error detection including authentication failures
 - **Output Filtering**: Automatically filters system messages from responses
@@ -65,6 +66,7 @@ func main() {
     config := geminicli.Config{
         Timeout: 60 * time.Second,  // Custom timeout
         Logger:  geminicli.NewNoOpLogger(), // Or your custom logger
+        Model:   "gemini-2.5-pro", // Custom model (default: "gemini-2.5-flash")
     }
     
     client := geminicli.NewClientWithConfig(config)
@@ -75,6 +77,40 @@ func main() {
         log.Fatal(err)
     }
     fmt.Println(response)
+}
+```
+
+### Model-Specific Usage
+
+```go
+package main
+
+import (
+    "fmt"
+    "log"
+    "time"
+    
+    "github.com/yubiquita/gemini-cli-wrapper"
+)
+
+func main() {
+    // Execute with specific model (convenience function)
+    response, err := geminicli.ExecuteWithModel("What is machine learning?", "gemini-2.5-flash")
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println(response)
+    
+    // Execute with model and custom timeout
+    response2, err := geminicli.ExecuteWithModelAndTimeout(
+        "Explain neural networks in detail", 
+        "gemini-2.5-pro", 
+        120*time.Second,
+    )
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println(response2)
 }
 ```
 
@@ -157,6 +193,14 @@ Executes a Gemini command using a default client.
 
 Executes a Gemini command with custom timeout using a default client.
 
+#### `ExecuteWithModel(prompt, model string) (string, error)`
+
+Executes a Gemini command with a specific model using a default client.
+
+#### `ExecuteWithModelAndTimeout(prompt, model string, timeout time.Duration) (string, error)`
+
+Executes a Gemini command with a specific model and custom timeout using a default client.
+
 #### `ValidateAvailable() error`
 
 Checks if Gemini CLI is available using a default client.
@@ -179,6 +223,7 @@ Parses and filters Gemini command output.
 type Config struct {
     Logger  Logger        // Custom logger implementation
     Timeout time.Duration // Command execution timeout
+    Model   string        // Model name (default: "gemini-2.5-flash")
 }
 ```
 

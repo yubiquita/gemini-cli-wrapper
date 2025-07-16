@@ -381,3 +381,224 @@ func TestNoOpLogger(t *testing.T) {
 	logger.WarnWith("test", "key", "value")
 	logger.ErrorWith("test", "key", "value")
 }
+
+// TestNewClientWithModel tests client creation with model configuration
+func TestNewClientWithModel(t *testing.T) {
+	customModel := "gemini-2.5-pro"
+	config := Config{
+		Model: customModel,
+	}
+	
+	client := NewClientWithConfig(config)
+	
+	if client == nil {
+		t.Error("NewClientWithConfig should return a valid client")
+	}
+	
+	// This will fail until we implement the model field
+	// Expected model should be stored in client
+}
+
+// TestBuildGeminiCommandWithModel tests command construction with model
+func TestBuildGeminiCommandWithModel(t *testing.T) {
+	tests := []struct {
+		name           string
+		prompt         string
+		model          string
+		expectedLength int
+		description    string
+	}{
+		{
+			name:           "BasicPromptWithModel",
+			prompt:         "test prompt",
+			model:          "gemini-2.5-flash",
+			expectedLength: 5, // ["gemini", "-m", "gemini-2.5-flash", "-p", "test prompt"]
+			description:    "Should build Gemini command with model",
+		},
+		{
+			name:           "PromptWithCustomModel",
+			prompt:         "test prompt",
+			model:          "gemini-2.5-pro",
+			expectedLength: 5,
+			description:    "Should build Gemini command with custom model",
+		},
+		{
+			name:           "PromptWithEmptyModel",
+			prompt:         "test prompt",
+			model:          "",
+			expectedLength: 5, // Should use default model
+			description:    "Should use default model when empty",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := Config{Model: tt.model}
+			client := NewClientWithConfig(config)
+			
+			// This will fail until we implement buildGeminiCommandWithModel
+			cmd := client.buildGeminiCommandWithModel(tt.prompt)
+
+			if len(cmd) != tt.expectedLength {
+				t.Errorf("Expected command length %d, got %d for test case '%s'",
+					tt.expectedLength, len(cmd), tt.name)
+			}
+
+			if len(cmd) > 0 && cmd[0] != "gemini" {
+				t.Errorf("Expected first argument to be 'gemini', got '%s'", cmd[0])
+			}
+
+			if len(cmd) > 1 && cmd[1] != "-m" {
+				t.Errorf("Expected second argument to be '-m', got '%s'", cmd[1])
+			}
+
+			expectedModel := tt.model
+			if expectedModel == "" {
+				expectedModel = "gemini-2.5-flash" // Default model
+			}
+			
+			if len(cmd) > 2 && cmd[2] != expectedModel {
+				t.Errorf("Expected third argument to be '%s', got '%s'", expectedModel, cmd[2])
+			}
+
+			if len(cmd) > 3 && cmd[3] != "-p" {
+				t.Errorf("Expected fourth argument to be '-p', got '%s'", cmd[3])
+			}
+
+			if len(cmd) > 4 && cmd[4] != tt.prompt {
+				t.Errorf("Expected fifth argument to be '%s', got '%s'", tt.prompt, cmd[4])
+			}
+		})
+	}
+}
+
+// TestExecuteWithModel tests executing commands with specific model
+func TestExecuteWithModel(t *testing.T) {
+	tests := []struct {
+		name        string
+		prompt      string
+		model       string
+		expectError bool
+		description string
+	}{
+		{
+			name:        "EmptyPromptWithModel",
+			prompt:      "",
+			model:       "gemini-2.5-flash",
+			expectError: true,
+			description: "Should return error for empty prompt even with model",
+		},
+		{
+			name:        "ValidPromptWithModel",
+			prompt:      "test prompt",
+			model:       "gemini-2.5-flash",
+			expectError: false,
+			description: "Should execute with specified model",
+		},
+		{
+			name:        "ValidPromptWithEmptyModel",
+			prompt:      "test prompt",
+			model:       "",
+			expectError: false,
+			description: "Should use default model when empty",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// This will fail until we implement ExecuteWithModel
+			result, err := ExecuteWithModel(tt.prompt, tt.model)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error for test case '%s', but got none", tt.name)
+				}
+			} else {
+				// Skip test if command not found (expected during development)
+				if err != nil && strings.Contains(err.Error(), "failed to execute Gemini command") {
+					t.Skip("Gemini command not available, skipping test")
+				}
+				
+				if err != nil {
+					t.Errorf("Unexpected error for test case '%s': %v", tt.name, err)
+				}
+				if result == "" && err == nil {
+					t.Errorf("Expected non-empty result for test case '%s'", tt.name)
+				}
+			}
+		})
+	}
+}
+
+// TestExecuteWithModelAndTimeout tests executing commands with model and timeout
+func TestExecuteWithModelAndTimeout(t *testing.T) {
+	timeout := 30 * time.Second
+	
+	tests := []struct {
+		name        string
+		prompt      string
+		model       string
+		expectError bool
+		description string
+	}{
+		{
+			name:        "EmptyPromptWithModelAndTimeout",
+			prompt:      "",
+			model:       "gemini-2.5-flash",
+			expectError: true,
+			description: "Should return error for empty prompt",
+		},
+		{
+			name:        "ValidPromptWithModelAndTimeout",
+			prompt:      "test prompt",
+			model:       "gemini-2.5-pro",
+			expectError: false,
+			description: "Should execute with specified model and timeout",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// This will fail until we implement ExecuteWithModelAndTimeout
+			result, err := ExecuteWithModelAndTimeout(tt.prompt, tt.model, timeout)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error for test case '%s', but got none", tt.name)
+				}
+			} else {
+				// Skip test if command not found (expected during development)
+				if err != nil && strings.Contains(err.Error(), "failed to execute Gemini command") {
+					t.Skip("Gemini command not available, skipping test")
+				}
+				
+				if err != nil {
+					t.Errorf("Unexpected error for test case '%s': %v", tt.name, err)
+				}
+				if result == "" && err == nil {
+					t.Errorf("Expected non-empty result for test case '%s'", tt.name)
+				}
+			}
+		})
+	}
+}
+
+// TestDefaultModel tests that default model is gemini-2.5-flash
+func TestDefaultModel(t *testing.T) {
+	client := NewClient()
+	
+	// This will fail until we implement the model field
+	// Expected default model should be "gemini-2.5-flash"
+	expectedDefault := "gemini-2.5-flash"
+	
+	// Build command and check if it contains default model
+	cmd := client.buildGeminiCommandWithModel("test")
+	
+	if len(cmd) < 3 {
+		t.Error("Command should contain model specification")
+	}
+	
+	if cmd[2] != expectedDefault {
+		t.Errorf("Expected default model '%s', got '%s'", expectedDefault, cmd[2])
+	}
+}
