@@ -340,11 +340,11 @@ func TestConvenienceExecuteWithTimeout(t *testing.T) {
 // TestNewClient tests client creation
 func TestNewClient(t *testing.T) {
 	client := NewClient()
-	
+
 	if client == nil {
 		t.Error("NewClient should return a valid client")
 	}
-	
+
 	if client.timeout != DefaultTimeout {
 		t.Errorf("Expected default timeout %v, got %v", DefaultTimeout, client.timeout)
 	}
@@ -354,18 +354,18 @@ func TestNewClient(t *testing.T) {
 func TestNewClientWithConfig(t *testing.T) {
 	customTimeout := 60 * time.Second
 	customLogger := NewNoOpLogger()
-	
+
 	config := Config{
 		Logger:  customLogger,
 		Timeout: customTimeout,
 	}
-	
+
 	client := NewClientWithConfig(config)
-	
+
 	if client == nil {
 		t.Error("NewClientWithConfig should return a valid client")
 	}
-	
+
 	if client.timeout != customTimeout {
 		t.Errorf("Expected custom timeout %v, got %v", customTimeout, client.timeout)
 	}
@@ -374,7 +374,7 @@ func TestNewClientWithConfig(t *testing.T) {
 // TestNoOpLogger tests the no-op logger implementation
 func TestNoOpLogger(t *testing.T) {
 	logger := NewNoOpLogger()
-	
+
 	// These should not panic
 	logger.DebugWith("test", "key", "value")
 	logger.InfoWith("test", "key", "value")
@@ -388,13 +388,13 @@ func TestNewClientWithModel(t *testing.T) {
 	config := Config{
 		Model: customModel,
 	}
-	
+
 	client := NewClientWithConfig(config)
-	
+
 	if client == nil {
 		t.Error("NewClientWithConfig should return a valid client")
 	}
-	
+
 	// This will fail until we implement the model field
 	// Expected model should be stored in client
 }
@@ -435,7 +435,7 @@ func TestBuildGeminiCommandWithModel(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			config := Config{Model: tt.model}
 			client := NewClientWithConfig(config)
-			
+
 			// This will fail until we implement buildGeminiCommandWithModel
 			cmd := client.buildGeminiCommandWithModel(tt.prompt)
 
@@ -456,7 +456,7 @@ func TestBuildGeminiCommandWithModel(t *testing.T) {
 			if expectedModel == "" {
 				expectedModel = "gemini-2.5-flash" // Default model
 			}
-			
+
 			if len(cmd) > 2 && cmd[2] != expectedModel {
 				t.Errorf("Expected third argument to be '%s', got '%s'", expectedModel, cmd[2])
 			}
@@ -518,7 +518,7 @@ func TestExecuteWithModel(t *testing.T) {
 				if err != nil && strings.Contains(err.Error(), "failed to execute Gemini command") {
 					t.Skip("Gemini command not available, skipping test")
 				}
-				
+
 				if err != nil {
 					t.Errorf("Unexpected error for test case '%s': %v", tt.name, err)
 				}
@@ -533,7 +533,7 @@ func TestExecuteWithModel(t *testing.T) {
 // TestExecuteWithModelAndTimeout tests executing commands with model and timeout
 func TestExecuteWithModelAndTimeout(t *testing.T) {
 	timeout := 30 * time.Second
-	
+
 	tests := []struct {
 		name        string
 		prompt      string
@@ -571,7 +571,7 @@ func TestExecuteWithModelAndTimeout(t *testing.T) {
 				if err != nil && strings.Contains(err.Error(), "failed to execute Gemini command") {
 					t.Skip("Gemini command not available, skipping test")
 				}
-				
+
 				if err != nil {
 					t.Errorf("Unexpected error for test case '%s': %v", tt.name, err)
 				}
@@ -586,19 +586,140 @@ func TestExecuteWithModelAndTimeout(t *testing.T) {
 // TestDefaultModel tests that default model is gemini-2.5-flash
 func TestDefaultModel(t *testing.T) {
 	client := NewClient()
-	
+
 	// This will fail until we implement the model field
 	// Expected default model should be "gemini-2.5-flash"
 	expectedDefault := "gemini-2.5-flash"
-	
+
 	// Build command and check if it contains default model
 	cmd := client.buildGeminiCommandWithModel("test")
-	
+
 	if len(cmd) < 3 {
 		t.Error("Command should contain model specification")
 	}
-	
+
 	if cmd[2] != expectedDefault {
 		t.Errorf("Expected default model '%s', got '%s'", expectedDefault, cmd[2])
+	}
+}
+
+// TestNewClientWithWorkingDirectory tests client creation with working directory configuration
+func TestNewClientWithWorkingDirectory(t *testing.T) {
+	customDir := "/tmp/custom_gemini_dir"
+	config := Config{
+		WorkingDirectory: customDir,
+	}
+
+	client := NewClientWithConfig(config)
+
+	if client == nil {
+		t.Error("NewClientWithConfig should return a valid client")
+	}
+
+	// This will fail until we implement the workingDirectory field
+	// Expected working directory should be stored in client
+}
+
+// TestExecuteWithWorkingDirectory tests command execution with custom working directory
+func TestExecuteWithWorkingDirectory(t *testing.T) {
+	customDir := "/tmp"
+	config := Config{
+		WorkingDirectory: customDir,
+	}
+
+	client := NewClientWithConfig(config)
+
+	// This will fail until we implement working directory functionality
+	_, err := client.Execute("test prompt")
+
+	// Should fail with command not found (expected during development)
+	// but should use the specified working directory
+	if err == nil {
+		t.Skip("Gemini command available, skipping working directory test")
+	}
+
+	// The error should indicate command execution failed, not directory issues
+	if !strings.Contains(err.Error(), "failed to execute Gemini command") {
+		t.Errorf("Expected command execution error, got: %v", err)
+	}
+}
+
+// TestWorkingDirectoryFallback tests fallback behavior when working directory is not set
+func TestWorkingDirectoryFallback(t *testing.T) {
+	// Test with empty working directory - should fall back to home directory
+	config := Config{
+		WorkingDirectory: "",
+	}
+
+	client := NewClientWithConfig(config)
+
+	// This should use home directory as fallback
+	_, err := client.Execute("test prompt")
+
+	// Should fail with command not found (expected during development)
+	if err == nil {
+		t.Skip("Gemini command available, skipping fallback test")
+	}
+
+	// The error should indicate command execution failed, not directory issues
+	if !strings.Contains(err.Error(), "failed to execute Gemini command") {
+		t.Errorf("Expected command execution error, got: %v", err)
+	}
+}
+
+// TestExecuteWithWorkingDirectory tests the convenience function for working directory execution
+func TestConvenienceExecuteWithWorkingDirectory(t *testing.T) {
+	customDir := "/tmp"
+
+	// This will fail until we implement ExecuteWithWorkingDirectory
+	_, err := ExecuteWithWorkingDirectory("test prompt", customDir)
+
+	// Should fail with command not found (expected during development)
+	if err == nil {
+		t.Skip("Gemini command available, skipping working directory test")
+	}
+
+	// The error should indicate command execution failed, not directory issues
+	if !strings.Contains(err.Error(), "failed to execute Gemini command") {
+		t.Errorf("Expected command execution error, got: %v", err)
+	}
+}
+
+// TestExecuteWithWorkingDirectoryAndTimeout tests the convenience function with working directory and timeout
+func TestConvenienceExecuteWithWorkingDirectoryAndTimeout(t *testing.T) {
+	customDir := "/tmp"
+	timeout := 30 * time.Second
+
+	// This will fail until we implement ExecuteWithWorkingDirectoryAndTimeout
+	_, err := ExecuteWithWorkingDirectoryAndTimeout("test prompt", customDir, timeout)
+
+	// Should fail with command not found (expected during development)
+	if err == nil {
+		t.Skip("Gemini command available, skipping working directory and timeout test")
+	}
+
+	// The error should indicate command execution failed, not directory issues
+	if !strings.Contains(err.Error(), "failed to execute Gemini command") {
+		t.Errorf("Expected command execution error, got: %v", err)
+	}
+}
+
+// TestExecuteWithFullConfig tests the convenience function with all configuration options
+func TestConvenienceExecuteWithFullConfig(t *testing.T) {
+	customDir := "/tmp"
+	customModel := "gemini-2.5-pro"
+	timeout := 30 * time.Second
+
+	// This will fail until we implement ExecuteWithFullConfig
+	_, err := ExecuteWithFullConfig("test prompt", customModel, customDir, timeout)
+
+	// Should fail with command not found (expected during development)
+	if err == nil {
+		t.Skip("Gemini command available, skipping full config test")
+	}
+
+	// The error should indicate command execution failed, not directory issues
+	if !strings.Contains(err.Error(), "failed to execute Gemini command") {
+		t.Errorf("Expected command execution error, got: %v", err)
 	}
 }

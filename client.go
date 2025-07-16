@@ -33,16 +33,18 @@ const (
 
 // Client represents a Gemini CLI client
 type Client struct {
-	logger  Logger
-	timeout time.Duration
-	model   string // Model name to use
+	logger           Logger
+	timeout          time.Duration
+	model            string // Model name to use
+	workingDirectory string // Working directory for command execution
 }
 
 // Config represents configuration options for the client
 type Config struct {
-	Logger  Logger
-	Timeout time.Duration
-	Model   string // Model name (e.g., "gemini-2.5-flash", "gemini-2.5-pro")
+	Logger           Logger
+	Timeout          time.Duration
+	Model            string // Model name (e.g., "gemini-2.5-flash", "gemini-2.5-pro")
+	WorkingDirectory string // Working directory for command execution
 }
 
 // NewClient creates a new Gemini CLI client with default configuration
@@ -75,6 +77,10 @@ func NewClientWithConfig(config Config) *Client {
 		client.model = config.Model
 	}
 
+	if config.WorkingDirectory != "" {
+		client.workingDirectory = config.WorkingDirectory
+	}
+
 	return client
 }
 
@@ -86,7 +92,7 @@ func (c *Client) Execute(prompt string) (string, error) {
 
 	// Build command
 	cmdArgs := c.buildGeminiCommandWithModel(prompt)
-	
+
 	// Log command execution for debugging
 	c.logger.DebugWith("Executing Gemini command", "command", cmdArgs[0], "args", cmdArgs[1:])
 
@@ -96,19 +102,25 @@ func (c *Client) Execute(prompt string) (string, error) {
 		c.logger.ErrorWith("Failed to find gemini command", "error", err)
 		return "", fmt.Errorf("gemini command not found: %w", err)
 	}
-	
+
 	c.logger.DebugWith("Using gemini path", "path", geminiPath)
 	cmd := exec.Command(geminiPath, cmdArgs[1:]...)
-	
-	// Set working directory to home directory to avoid module resolution issues
-	cmd.Dir = os.Getenv("HOME")
-	if cmd.Dir == "" {
-		// Fallback to current user's home directory
-		if user, err := user.Current(); err == nil {
-			cmd.Dir = user.HomeDir
+
+	// Set working directory based on configuration or fallback to home directory
+	if c.workingDirectory != "" {
+		cmd.Dir = c.workingDirectory
+		c.logger.DebugWith("Using configured working directory", "dir", cmd.Dir)
+	} else {
+		// Fallback to home directory to avoid module resolution issues
+		cmd.Dir = os.Getenv("HOME")
+		if cmd.Dir == "" {
+			// Fallback to current user's home directory
+			if user, err := user.Current(); err == nil {
+				cmd.Dir = user.HomeDir
+			}
 		}
+		c.logger.DebugWith("Using default home directory", "dir", cmd.Dir)
 	}
-	c.logger.DebugWith("Set working directory", "dir", cmd.Dir)
 
 	// Execute with timeout
 	output, err := c.runCommandWithTimeout(cmd, c.timeout)
@@ -137,21 +149,50 @@ func (c *Client) ExecuteWithTimeout(prompt string, timeout time.Duration) (strin
 	// Build command
 	cmdArgs := c.buildGeminiCommandWithModel(prompt)
 
-	// Create command
-	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+	// Log command execution for debugging
+	c.logger.DebugWith("Executing Gemini command with timeout", "command", cmdArgs[0], "args", cmdArgs[1:], "timeout", timeout)
+
+	// Create command with full path to avoid module resolution issues
+	geminiPath, err := exec.LookPath(cmdArgs[0])
+	if err != nil {
+		c.logger.ErrorWith("Failed to find gemini command", "error", err)
+		return "", fmt.Errorf("gemini command not found: %w", err)
+	}
+
+	c.logger.DebugWith("Using gemini path", "path", geminiPath)
+	cmd := exec.Command(geminiPath, cmdArgs[1:]...)
+
+	// Set working directory based on configuration or fallback to home directory
+	if c.workingDirectory != "" {
+		cmd.Dir = c.workingDirectory
+		c.logger.DebugWith("Using configured working directory", "dir", cmd.Dir)
+	} else {
+		// Fallback to home directory to avoid module resolution issues
+		cmd.Dir = os.Getenv("HOME")
+		if cmd.Dir == "" {
+			// Fallback to current user's home directory
+			if user, err := user.Current(); err == nil {
+				cmd.Dir = user.HomeDir
+			}
+		}
+		c.logger.DebugWith("Using default home directory", "dir", cmd.Dir)
+	}
 
 	// Execute with custom timeout
 	output, err := c.runCommandWithTimeout(cmd, timeout)
 	if err != nil {
+		c.logger.ErrorWith("Gemini command execution failed", "error", err)
 		return "", fmt.Errorf("%s: %w", ErrCommandFailed, err)
 	}
 
 	// Parse output
 	result, err := c.parseGeminiOutput(output)
 	if err != nil {
+		c.logger.ErrorWith("Failed to parse Gemini output", "error", err, "output_length", len(output))
 		return "", fmt.Errorf("%s: %w", ErrParseOutput, err)
 	}
 
+	c.logger.DebugWith("Gemini command completed successfully", "response_length", len(result))
 	return result, nil
 }
 
@@ -201,12 +242,12 @@ func (c *Client) runCommandWithTimeout(cmd *exec.Cmd, timeout time.Duration) ([]
 			stdoutStr := strings.TrimSpace(string(stdout.Bytes()))
 			stderrStr := strings.TrimSpace(string(stderr.Bytes()))
 			combined := append(stdout.Bytes(), stderr.Bytes()...)
-			
+
 			// Check if it's an authentication error
 			if c.detectAuthError(combined) {
 				return nil, fmt.Errorf(ErrAuthFailed)
 			}
-			
+
 			// Create detailed error message
 			errorMsg := fmt.Sprintf("command failed: %v", err)
 			if stderrStr != "" {
@@ -215,7 +256,7 @@ func (c *Client) runCommandWithTimeout(cmd *exec.Cmd, timeout time.Duration) ([]
 			if stdoutStr != "" {
 				errorMsg += fmt.Sprintf(" | stdout: %s", stdoutStr)
 			}
-			
+
 			return nil, fmt.Errorf("%s", errorMsg)
 		}
 		return stdout.Bytes(), nil
@@ -279,7 +320,7 @@ func (c *Client) filterGeminiOutput(output string) string {
 	// Split output into lines
 	lines := strings.Split(output, "\n")
 	var filteredLines []string
-	
+
 	// Filter patterns that should be removed
 	filterPatterns := []string{
 		"Loaded cached credentials.",
@@ -290,11 +331,11 @@ func (c *Client) filterGeminiOutput(output string) string {
 		"Using cached token",
 		"Token refreshed",
 	}
-	
+
 	for _, line := range lines {
 		trimmedLine := strings.TrimSpace(line)
 		shouldFilter := false
-		
+
 		// Check if line matches any filter pattern
 		for _, pattern := range filterPatterns {
 			if strings.Contains(trimmedLine, pattern) {
@@ -302,13 +343,13 @@ func (c *Client) filterGeminiOutput(output string) string {
 				break
 			}
 		}
-		
+
 		// Keep the line if it doesn't match filter patterns and isn't empty
 		if !shouldFilter && trimmedLine != "" {
 			filteredLines = append(filteredLines, line)
 		}
 	}
-	
+
 	// Join filtered lines and normalize whitespace
 	result := strings.Join(filteredLines, "\n")
 	return strings.TrimSpace(result)
@@ -362,6 +403,31 @@ func ExecuteWithModel(prompt, model string) (string, error) {
 // ExecuteWithModelAndTimeout executes a Gemini command with the specified model and timeout
 func ExecuteWithModelAndTimeout(prompt, model string, timeout time.Duration) (string, error) {
 	config := Config{Model: model, Timeout: timeout}
+	client := NewClientWithConfig(config)
+	return client.Execute(prompt)
+}
+
+// ExecuteWithWorkingDirectory executes a Gemini command with the specified working directory
+func ExecuteWithWorkingDirectory(prompt, workingDirectory string) (string, error) {
+	config := Config{WorkingDirectory: workingDirectory}
+	client := NewClientWithConfig(config)
+	return client.Execute(prompt)
+}
+
+// ExecuteWithWorkingDirectoryAndTimeout executes a Gemini command with the specified working directory and timeout
+func ExecuteWithWorkingDirectoryAndTimeout(prompt, workingDirectory string, timeout time.Duration) (string, error) {
+	config := Config{WorkingDirectory: workingDirectory, Timeout: timeout}
+	client := NewClientWithConfig(config)
+	return client.Execute(prompt)
+}
+
+// ExecuteWithFullConfig executes a Gemini command with all configuration options
+func ExecuteWithFullConfig(prompt, model, workingDirectory string, timeout time.Duration) (string, error) {
+	config := Config{
+		Model:            model,
+		WorkingDirectory: workingDirectory,
+		Timeout:          timeout,
+	}
 	client := NewClientWithConfig(config)
 	return client.Execute(prompt)
 }

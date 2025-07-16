@@ -34,6 +34,7 @@ This is a Go library that provides a wrapper around the Gemini CLI command for p
   - Timeout configuration
   - Logging integration
   - Authentication error detection
+  - Working directory configuration for custom execution context
 
 - **Logger Interface** (`logger.go`): Pluggable logging interface
   - NoOpLogger for silent operation
@@ -48,12 +49,14 @@ This is a Go library that provides a wrapper around the Gemini CLI command for p
 - **Authentication Detection**: Detects and handles API credential issues
 - **Timeout Support**: Configurable command timeouts
 - **Model Support**: Supports different Gemini models with default gemini-2.5-flash
+- **Working Directory**: Custom working directory support for executing commands in specific contexts
 
 ### Default Configuration
 
 - Default timeout: 30 seconds
 - Default model: "gemini-2.5-flash"
 - Default logger: NoOpLogger (silent)
+- Default working directory: User's home directory
 
 ### Error Handling
 
@@ -76,6 +79,44 @@ The codebase uses Test-Driven Development (TDD) with comprehensive test coverage
 - Model selection testing
 
 Tests are designed to handle cases where the Gemini CLI is not available during development.
+
+## Usage Examples
+
+### Basic Usage
+```go
+client := geminicli.NewClient()
+response, err := client.Execute("What is the weather like today?")
+```
+
+### With Custom Working Directory
+```go
+config := geminicli.Config{
+    WorkingDirectory: "/path/to/custom/directory",
+}
+client := geminicli.NewClientWithConfig(config)
+response, err := client.Execute("Analyze the files in this directory")
+```
+
+### With Full Configuration
+```go
+config := geminicli.Config{
+    Model:            "gemini-2.5-pro",
+    WorkingDirectory: "/path/to/project",
+    Timeout:          60 * time.Second,
+    Logger:           myLogger,
+}
+client := geminicli.NewClientWithConfig(config)
+response, err := client.Execute("Review the code in this project")
+```
+
+### Convenience Functions
+```go
+// With working directory
+response, err := geminicli.ExecuteWithWorkingDirectory("prompt", "/custom/dir")
+
+// With all options
+response, err := geminicli.ExecuteWithFullConfig("prompt", "gemini-2.5-pro", "/custom/dir", 60*time.Second)
+```
 
 ## Prerequisites
 
